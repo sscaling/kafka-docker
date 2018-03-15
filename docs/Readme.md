@@ -86,9 +86,11 @@ Looking at the above diagram, it should be clear that both the `DOCKER_HOST_IP` 
 References
 ----------
 
+-	[Understanding docker networking drivers](https://blog.docker.com/2016/12/understanding-docker-networking-drivers-use-cases/)
 -	[Read internal offset](http://dayooliyide.com/post/kafka-consumer-offsets-topic/)
 -	Storage of offsets in kafka we're introduced in 0.8.1.1 [docs](https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka)
 -	[Consumer offset checker](https://stackoverflow.com/questions/34019386/how-to-check-consumer-offsets-when-the-offset-store-is-kafka)
+-	[Failover](https://dzone.com/articles/kafka-topic-architecture-replication-failover-and<Paste)
 
 ```
 {
