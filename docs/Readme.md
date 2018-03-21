@@ -1,29 +1,118 @@
 Kafka connectivity
 ==================
 
-### TODO
+A large percentage of questions and issues opened against the kafka-docker project concern configuring Kafka networking. This is often a case of not understanding the Kafka requirements, or not understanding docker networking.
 
--	Tidy up / Review
--	Add further examples?
+This page aims to explain some of the basic requirements to help people resolve any initial issues they may encounter. It is not an exhaustive guide to configuring Kafka and/or Docker.
 
-A large amount of questions / issues opened against this project fall under the category of 'not understanding docker' or 'not understanding kafka'. This document aims to talk though the common connectivity issues and hopefully provide enough information to reduce these type of questions.
+Kafka requirements
+------------------
 
-Communication paths
--------------------
+There are three main requirements for configuring Kafka networking.
 
-To understand configuration a little better, we need to understand the main communication paths in kafka.
+1.	Each Broker must be able to talk to Zookeeper - for leader election etc.
+2.	Each Broker must be able to talk to every other Broker - for replication etc.
+3.	Each Consumer/Producer must be able to talk to every Broker - for reading/writing data etc.
 
-1.	Consumer -> Broker (for reading data)
-2.	Broker -> Producer (for writing data)
-3.	Broker -> Broker (replication etc)
+The following diagram represents the different communication paths:
+
+![Kafka communication paths](kafka-communication.png)
 
 This means for a complete working Kafka setup, each one of the components must be able to route to the other and have accessible ports.
 
-How does each component know where the other component is on the network? Simple, zookeeper. Brokers read information directly from zookeeper, clients (producers/consumers) get this from the broker.
+Kafka in Docker
+---------------
 
-A Broker is configured with a `zookeeper.connect` string. When it starts up, it registers itself in the `/brokers/ids/<n>` zNode (where `<n>` is the broker.id config). As all brokers can talk to the same zookeeper, all the brokers (ergo all clients) can get the address of each broker.
+First, let's take a look at the simplest use-case - running a single Kafka broker.
 
-Depending on your configuration, this will look something like:
+```
+# KAFKA_ADVERTISED_HOST_NAME: localhost
+# ZOOKEEPER_CONNECT: zookeeper:2181
+docker-compose -f docker-compose-single-broker.yml up -d
+```
+
+![Single Kafka Broker](kafka-single-broker.png)
+
+Two containers are created which share the `kafkadocker_default` bridge network created by docker-compose. Here you can see both ports from the container are mapped directly to the host's network interface (2181 and 9092)
+
+**NOTE:** When using docker-compose, all containers are generally started in the same networking namespace. I say 'generally' as you can configure multiple networks, but we're sticking to the simple use-case here.
+
+In this setup all Kafka requirements are met:
+
+1.	the Kafka container can talk to Zookeeper via the `zookeeper` DNS entry that exists within the `kafkadocker_default` network
+2.	the Kafka container can talk to itself on `localhost:9092` (within the containers networking namespace)
+3.	Consumers and Producers can talk to the Kafka broker using `localhost:9092` address. This is because docker will generally bind the port to all interfaces (0.0.0.0) when it is published.
+
+```
+$ docker ps
+CONTAINER ID        IMAGE                      PORTS                                                NAMES
+1bf0d78a352c        wurstmeister/zookeeper     22/tcp, 2888/tcp, 3888/tcp, 0.0.0.0:2181->2181/tcp   kafkadocker_zookeeper_1
+d0c932301db5        kafkadocker_kafka          0.0.0.0:9092->9092/tcp                               kafkadocker_kafka_1
+```
+
+Next, let's look at the common use-case - running multiple Kafka brokers.
+
+```
+# KAFKA_ADVERTISED_HOST_NAME: 192.168.1.2
+# ZOOKEEPER_CONNET: zookeeper:2181
+docker-compose up -d zookeeper
+docker-compose scale kafka=2
+```
+
+![Multiple Kafka Brokers](kafka-multi-broker.png)
+
+Here, the key differences are two configurations in the `docker-compose.yml` file; `ports` and the `KAFKA_ADVERTISED_HOST_NAME` environment variable.
+
+Because it is only possible to bind to each unique port once on a single interface, we can no longer publish the Broker port (9092). Instead, we simply expose the port.
+
+```
+ports:
+  - "9092"
+```
+
+This results in docker binding an ephemeral port on the host interface to the container port.
+
+```
+$ docker ps
+CONTAINER ID        IMAGE                      PORTS                                                NAMES
+2c3fe5e651bf        kafkadocker_kafka          0.0.0.0:32000->9092/tcp                              kafkadocker_kafka_2
+4e22d3d715ec        kafkadocker_kafka          0.0.0.0:32001->9092/tcp                              kafkadocker_kafka_1
+bfb5545efe6b        wurstmeister/zookeeper     22/tcp, 2888/tcp, 3888/tcp, 0.0.0.0:2181->2181/tcp   kafkadocker_zookeeper_1
+```
+
+This should hopefully explain why we had to use the hosts interface address in the `KAFKA_ADVERTISED_HOST_NAME` environment var. Let's cement this understanding by adding consumers / producers to the diagram:
+
+![Kafka connectivity](kafka-connectivity.png)
+
+This explains why all Kafka requirements are met:
+
+1.	The Kafka containers can still use the `zookeeper` DNS entry to talk to zookeeper in the `kafkadocker_default` network
+2.	The Kafka containers can talk to each other by routing from the `kafkadocker_default` bridge network to the listening host interface ( `192.168.1.2:32000` and `192.168.1.2:32001` )
+3.	Consumers and Producers and also talk to the Kafka containers by the host interface ( `192.168.1.2:32000` and `192.168.1.2:32001` )
+
+**NOTE:** It is worth pointing out that the `kafka-console-producer.sh` shell container is started on the `default` bridge because it was simply started with the `docker run` command (see the `start-kafka-shell.sh` script)
+
+For completeness, here is a `kafkacat` example:
+
+```
+# Publish
+kafkacat -b 192.168.1.2:32000,192.168.1.2:32001 -P -t test
+
+# Consume
+kafkacat -b 192.168.1.2:32000,192.168.1.2:32001 -C -t test
+```
+
+Additional Listener information
+===============================
+
+The following is a little more background information, optional, but supplementary to the above documentation.
+
+Internal versus Advertised
+--------------------------
+
+Kafka has always had the notion of an 'advertised' host and port. This is a mechanism to allow the public address of a node (i.e. DNS record) to be different to an internal address. This is especially useful if you have elastic compute and do not necessarily know what the IP of a broker will be.
+
+The broker registers the information from its config with Zookeeper when it starts up. It looks something like this:
 
 ```
 {
@@ -41,56 +130,11 @@ Depending on your configuration, this will look something like:
 }
 ```
 
-Look at the following diagram
+During a Client (Consumer/Producer) bootstrap process, it will connect to either Zookeeper/Kafka (depending on the version and implementation) to receive a list of meta-data.
 
-![Kafka settings](kafka-settings.png)
+Meta-data contains information for topics, specifically which broker is responsible for a partition. The broker information returned will be based on the `advertised.host.name`/`advertised.port` configuration (if specified).
 
-It shows the basic Kafka communication paths (ignoring docker for now). Here you can see that Kafka brokers not only respond to external requests (from consumers/producers) but they also talk to each other (for replication amongst other things).
-
-This helps us understand the answer to one of the common questions, "What should the hostname/IP be for KAFKA_ADVERTISED_HOSTNAME?"
-
-Well, we know it has to meet at least the following two criteria:
-
-1.	Routable from external clients
-2.	Routable from other brokers
-
-So for a multi-node cluster, this cannot be 'localhost' as node1 would not be able to route to node2 via 'localhost'. It would need it's IP or FQDN.
-
-Now look at how docker networking works (at a high-level)
-
-![Kafka docker network](kafka-docker-network.png)
-
-Here you can see that each container (Zookeeper, Kafka 1, Kafka 2) are in their own isolated namespaces, which includes an IP that is only routable via the `kafkadocker_default` bridge network. Internal to the network these containers expose the underlying service through the standard ports (2181/9092). However external to this bridge network they are mapped to available ports on the hosts network (192.168.1.2).
-
-How do we connect to the containers from external components (other containers/standalone processes etc) ?
-
-![Kafka connectivity](kafka-connectivity.png)
-
-As you can see in the case of the standalone process `kafkacat`, this only has access to the hosts network. So to access zookeeper or kafka, it has to use the mapped port on the host network (i.e. Kafka 1 would be routable on `192.168.1.2:32200` )
-
-In the case of the `Shell` container, when it is started it is bound to a different bridge network. This again, only has access to other containers in the default bridge network, or on the host network. So just like the standalone process, Kafka 1 could be reached on `192.168.1.2:32200`.
-
-This also tells us that our `KAFKA_ADVERTISED_HOST_NAME` would need to be `192.168.1.2` so it is routable from both inside the containers and external clients.
-
-This helps answer another common question that arises from following the tutorials, "What should I use for zookeeper host?"
-
-In the case of the `kafka-topics.sh` command, the tutorial has
-
-```
-$ start-kafka-shell.sh <DOCKER_HOST_IP> <ZK_HOST:ZK_PORT>
-$ $KAFKA_HOME/bin/kafka-topics.sh --create --topic topic --partitions 4 --zookeeper $ZK --replication-factor 2
-```
-
-Looking at the above diagram, it should be clear that both the `DOCKER_HOST_IP` and `ZK_HOST` need to be the host machines IP of `192.168.1.2` so it is routable.
-
-References
-----------
-
--	[Understanding docker networking drivers](https://blog.docker.com/2016/12/understanding-docker-networking-drivers-use-cases/)
--	[Read internal offset](http://dayooliyide.com/post/kafka-consumer-offsets-topic/)
--	Storage of offsets in kafka we're introduced in 0.8.1.1 [docs](https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka)
--	[Consumer offset checker](https://stackoverflow.com/questions/34019386/how-to-check-consumer-offsets-when-the-offset-store-is-kafka)
--	[Failover](https://dzone.com/articles/kafka-topic-architecture-replication-failover-and<Paste)
+An abbrieviated example is shown below:
 
 ```
 {
@@ -104,4 +148,24 @@ References
     ]
   }
 }
+```
+
+Since Kafka 0.9.0 - it has been possible to specify multiple ports for listening on. This is to facilitate support for multiple protocols (i.e. PLAINTEXT,SASL,SSL etc) and separate internal and external traffic. With this change, `host.name` and `port` have been deprecated in favour of `listeners`. `advertised.host.name` and `advertised.port` have been deprecated in favour of `advertised.listeners`.
+
+Below is the same configuration represented in the deprecated and current formats:
+
+**Deprecated**
+
+```
+KAFKA_HOST:
+KAFKA_PORT: 9092
+KAFKA_ADVERTISED_HOST_NAME: one.prod.com
+KAFKA_ADVERTISED_PORT: 9092
+```
+
+**Current**
+
+```
+KAFKA_LISTENERS: PLAINTEXT://:9092
+KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://one.prod.com:9092
 ```
