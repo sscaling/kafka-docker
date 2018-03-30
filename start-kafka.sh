@@ -53,6 +53,18 @@ if [[ -n "$HOSTNAME_COMMAND" ]]; then
     done
 fi
 
+if [[ -n "$PORT_COMMAND" ]]; then
+    PORT_VALUE=$(eval "$PORT_COMMAND")
+    # Replace any occurences of _{PORT_COMMAND} with the value
+    for VAR in $(env); do
+        if [[ $VAR =~ ^KAFKA_ && "$VAR" =~ "_{PORT_COMMAND}" ]]; then
+            # shellcheck disable=SC2163
+	    # use eval here?
+            export "${VAR//_\{PORT_COMMAND\}/$PORT_VALUE}"
+        fi
+    done
+fi
+
 if [[ -n "$RACK_COMMAND" && -z "$KAFKA_BROKER_RACK" ]]; then
     KAFKA_BROKER_RACK=$(eval "$RACK_COMMAND")
     export KAFKA_BROKER_RACK

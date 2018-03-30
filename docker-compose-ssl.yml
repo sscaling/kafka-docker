@@ -1,0 +1,44 @@
+version: '2'
+services:
+  zookeeper:
+    image: wurstmeister/zookeeper
+    ports:
+      - "2181:2181"
+  kafka:
+    build: .
+    ports:
+      - "9092"
+      - "9093"
+    environment:
+      PORT_COMMAND: "docker port $$(hostname) 9093/tcp | cut -d: -f2"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://:9092,SSL://192.168.128.156:_{PORT_COMMAND}
+      #KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://:9092,SSL://kafka:_{PORT_COMMAND}
+      KAFKA_LISTENERS: PLAINTEXT://:9092,SSL://0.0.0.0:9093
+      KAFKA_SSL_KEYSTORE_LOCATION: /certs/server.keystore.jks
+      KAFKA_SSL_KEYSTORE_PASSWORD: storepass
+      KAFKA_SSL_KEY_PASSWORD: keypass
+      KAFKA_SSL_TRUSTSTORE_LOCATION: /certs/server.truststore.jks
+      KAFKA_SSL_TRUSTSTORE_PASSWORD: storepass
+      # Optional
+      # KAFKA_SSL_CLIENT_AUTH: required|requested
+      # KAFKA_SSL_CIPHER_SUITES:
+      # KAFKA_SSL_ENABLED_PROTOCOLS: TLSv1.2,TLSv1.1,TLSv1
+      # KAFKA_SSL_KEYSTORE_TYPE: jks
+      # KAFKA_SSL_TRUSTSTORE_TYPE: jks
+      # KAFKA_SSL_SECURE_RANDOM_IMPLEMENTATION: SHA1PRNG
+      #
+      # security.inter.broker.protocol=SSL
+      LOG4J_LOGGER_KAFKA_AUTHORIZER_LOGGER: DEBUG, authorizerAppender
+      LOG4J_LOGGER_KAFKA_NETWORK_PROCESSOR: TRACE, requestAppender
+      LOG4J_LOGGER_KAFKA_SERVER_KAFKAAPIS: TRACE, requestAppender
+      LOG4J_LOGGER_KAFKA: DEBUG
+      LOG4J_LOGGER_ORG_APACHE_KAFKA: DEBUG
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - certstore:/certs
+
+volumes:
+  certstore:
+    external: true
+
