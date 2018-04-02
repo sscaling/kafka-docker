@@ -1,0 +1,36 @@
+version: '2'
+services:
+  zookeeper:
+    image: wurstmeister/zookeeper
+    ports:
+      - "2181:2181"
+  kafka:
+    image: wurstmeister/kafka
+    ports:
+      - "9092"
+      - "9093"
+    environment:
+      PORT_COMMAND: "docker port $$(hostname) 9093/tcp | cut -d: -f2"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://:9092,SSL://${IP}:_{PORT_COMMAND}
+      KAFKA_LISTENERS: PLAINTEXT://:9092,SSL://0.0.0.0:9093
+      KAFKA_SSL_KEYSTORE_LOCATION: /certs/broker.keystore.jks
+      KAFKA_SSL_KEYSTORE_PASSWORD: storepass
+      KAFKA_SSL_KEY_PASSWORD: keypass
+      # Optional
+      # KAFKA_SSL_CLIENT_AUTH: required|requested
+      # KAFKA_SSL_CIPHER_SUITES:
+      # KAFKA_SSL_ENABLED_PROTOCOLS: TLSv1.2,TLSv1.1,TLSv1
+      # KAFKA_SSL_KEYSTORE_TYPE: jks
+      # KAFKA_SSL_TRUSTSTORE_TYPE: jks
+      # KAFKA_SSL_SECURE_RANDOM_IMPLEMENTATION: SHA1PRNG
+      # KAFKA_SECURITY_INTER_BROKER_PROTOCOL: SSL
+      # KAFKA_SSL_TRUSTSTORE_LOCATION: /certs/broker.truststore.jks
+      # KAFKA_SSL_TRUSTSTORE_PASSWORD: storepass
+      #
+      # Enable debugging to help diagnose TLS issues
+      # LOG4J_LOGGER_KAFKA: DEBUG
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./certs:/certs
+
