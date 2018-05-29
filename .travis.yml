@@ -75,7 +75,7 @@ deploy:
     on:
       repo: wurstmeister/kafka-docker
       branch: master
-      condition: "$TRAVIS_SCALA_VERSION-$KAFKA_VERSION" = "$LATEST"
+      # condition: "$TRAVIS_SCALA_VERSION-$KAFKA_VERSION" = "$LATEST"
   - provider: script
     script: bash docker_push "${TRAVIS_SCALA_VERSION}-${KAFKA_VERSION}"
     on:
