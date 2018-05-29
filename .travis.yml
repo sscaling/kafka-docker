@@ -71,13 +71,13 @@ after_script:
 # This will deploy from master. Might want to have a single release branch for a little more control
 deploy:
   - provider: script
+    script: bash docker_push latest
+    on:
+      repo: wurstmeister/kafka-docker
+      branch: master
+      condition: "$TRAVIS_SCALA_VERSION-$KAFKA_VERSION" = "$LATEST"
+  - provider: script
     script: bash docker_push "${TRAVIS_SCALA_VERSION}-${KAFKA_VERSION}"
     on:
       repo: wurstmeister/kafka-docker
       # branch: release
-  # - provider: script
-  #   script: bash docker_push latest
-  #   on:
-  #     repo: wurstmeister/kafka-docker
-  #     branch: master
-  #     condition: "${TRAVIS_SCALA_VERSION}-${KAFKA_VERSION}" = "$LATEST"
