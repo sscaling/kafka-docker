@@ -19,9 +19,9 @@ services:
 #  - KAFKA_VERSION=1.1.0
 
 # This version will be also tagged as 'latest'
-# env:
-#   global:
-#     - LATEST="2.11-1.1.0"
+env:
+  global:
+    - LATEST="2.11-1.1.0"
 
 # Build recommended versions based on: http://kafka.apache.org/downloads
 matrix:
@@ -72,10 +72,12 @@ after_script:
 deploy:
   - provider: script
     script: bash docker_push "${TRAVIS_SCALA_VERSION}-${KAFKA_VERSION}"
-    # on:
-    #   branch: release
+    on:
+      repo: wurstmeister/kafka-docker
+      # branch: release
   - provider: script
     script: bash docker_push latest
     on:
+      repo: wurstmeister/kafka-docker
       branch: master
       condition: "${TRAVIS_SCALA_VERSION}-${KAFKA_VERSION}" = "$LATEST"
