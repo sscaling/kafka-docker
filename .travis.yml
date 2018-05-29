@@ -45,6 +45,7 @@ install:
   - echo "KAFKA VERSION  $KAFKA_VERSION"
   - echo "SCALA VERSION  $TRAVIS_SCALA_VERSION"
   - echo "LATEST VERSION $LATEST"
+  - export CURRENT=${TRAVIS_SCALA_VERSION}-${KAFKA_VERSION}
   - docker build --build-arg kafka_version=$KAFKA_VERSION --build-arg scala_version=$TRAVIS_SCALA_VERSION -t wurstmeister/kafka .
   - docker pull confluentinc/cp-kafkacat
 
@@ -75,7 +76,7 @@ deploy:
     on:
       repo: wurstmeister/kafka-docker
       branch: master
-      # condition: "$TRAVIS_SCALA_VERSION-$KAFKA_VERSION" = "$LATEST"
+      condition: $CURRENT = $LATEST
   - provider: script
     script: bash docker_push "${TRAVIS_SCALA_VERSION}-${KAFKA_VERSION}"
     on:
